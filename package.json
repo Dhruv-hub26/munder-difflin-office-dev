@@ -1,0 +1,19 @@
+{
+  "name": "munder-difflin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-ready multi-agent AI software engineering platform visualized inside an interactive 2D pixel-art virtual office",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -n \"SERVER,WEB\" -c \"cyan.bold,magenta.bold\" \"npm run dev --workspace=apps/server\" \"npm run dev --workspace=apps/web\"",
+    "dev:server": "npm run dev --workspace=apps/server",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=apps/server && npm run build --workspace=apps/web",
+    "check": "npm run check --workspace=apps/server && npm run check --workspace=apps/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
