@@ -1,4 +1,4 @@
-import { Agent, Coordinates, OfficeState } from '../../lib/types';
+import { Agent, CameraPreset, Dimensions, OfficeState } from '../../lib/types';
 import {
   drawCharacter,
   drawDesk,
@@ -6,6 +6,7 @@ import {
   drawServerRoom,
   drawCoffeeLounge,
   drawOfficeFloor,
+  DEFAULT_DIMENSIONS,
   Particle,
 } from './sprites';
 
@@ -44,8 +45,12 @@ export class OfficeEngine {
     this.onSelectAgentCallback = onSelectAgent;
 
     this.setupEvents();
-    this.centerView();
-    this.startLoop();
+    
+    // Wrap initial dimension calculation in requestAnimationFrame to prevent null/zero bounds crash
+    requestAnimationFrame(() => {
+      this.centerView();
+      this.startLoop();
+    });
   }
 
   public updateState(state: OfficeState): void {
@@ -58,21 +63,60 @@ export class OfficeEngine {
 
   public centerView(): void {
     const rect = this.canvas.getBoundingClientRect();
-    // Office virtual world size is 900 x 540
-    this.zoom = Math.min(rect.width / 920, rect.height / 560, 1.3);
-    this.cameraX = (rect.width - 860 * this.zoom) / 2;
-    this.cameraY = (rect.height - 480 * this.zoom) / 2;
+    const width = rect.width || this.canvas.parentElement?.clientWidth || 1200;
+    const height = rect.height || this.canvas.parentElement?.clientHeight || 750;
+
+    // Office virtual world size is 880 x 480
+    this.zoom = Math.min(width / 920, height / 560, 1.25);
+    if (this.zoom <= 0.1) this.zoom = 1.0;
+    this.cameraX = (width - 860 * this.zoom) / 2;
+    this.cameraY = (height - 480 * this.zoom) / 2;
+  }
+
+  public focusPreset(preset: CameraPreset): void {
+    const rect = this.canvas.getBoundingClientRect();
+    const width = rect.width || 1200;
+    const height = rect.height || 750;
+
+    switch (preset) {
+      case 'jim':
+        // Coder Jim is at (420, 190)
+        this.zoom = 1.8;
+        this.cameraX = width / 2 - 420 * this.zoom;
+        this.cameraY = height / 2 - 190 * this.zoom;
+        this.selectedAgentId = 'coder';
+        break;
+      case 'server':
+        // Server room is at (740, 280)
+        this.zoom = 1.7;
+        this.cameraX = width / 2 - 740 * this.zoom;
+        this.cameraY = height / 2 - 280 * this.zoom;
+        this.selectedAgentId = 'devops';
+        break;
+      case 'pm':
+        // Michael PM is at (260, 190) or conference (180, 140)
+        this.zoom = 1.7;
+        this.cameraX = width / 2 - 240 * this.zoom;
+        this.cameraY = height / 2 - 160 * this.zoom;
+        this.selectedAgentId = 'pm';
+        break;
+      case 'all':
+      default:
+        this.centerView();
+        break;
+    }
   }
 
   public zoomIn(): void {
-    this.zoom = Math.min(this.zoom * 1.2, 2.5);
+    this.zoom = Math.min(this.zoom * 1.2, 2.6);
   }
 
   public zoomOut(): void {
-    this.zoom = Math.max(this.zoom / 1.2, 0.5);
+    this.zoom = Math.max(this.zoom / 1.2, 0.45);
   }
 
   public resize(width: number, height: number): void {
+    if (!width || !height || width <= 0 || height <= 0) return;
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = width * dpr;
     this.canvas.height = height * dpr;
@@ -92,11 +136,9 @@ export class OfficeEngine {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Convert screen coordinates to world coordinates
     const worldX = (mouseX - this.cameraX) / this.zoom;
     const worldY = (mouseY - this.cameraY) / this.zoom;
 
-    // Check hit test on agents
     const hitAgent = this.findAgentAt(worldX, worldY);
     if (hitAgent) {
       this.selectedAgentId = hitAgent.id;
@@ -106,7 +148,6 @@ export class OfficeEngine {
       return;
     }
 
-    // Otherwise initiate pan drag
     this.isDragging = true;
     this.dragStartX = mouseX - this.cameraX;
     this.dragStartY = mouseY - this.cameraY;
@@ -123,7 +164,6 @@ export class OfficeEngine {
       return;
     }
 
-    // Check hover
     const worldX = (mouseX - this.cameraX) / this.zoom;
     const worldY = (mouseY - this.cameraY) / this.zoom;
     const hitAgent = this.findAgentAt(worldX, worldY);
@@ -150,7 +190,6 @@ export class OfficeEngine {
     const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
     const newZoom = Math.min(Math.max(this.zoom * zoomFactor, 0.45), 2.8);
 
-    // Zoom centered on cursor
     this.cameraX = mouseX - (mouseX - this.cameraX) * (newZoom / this.zoom);
     this.cameraY = mouseY - (mouseY - this.cameraY) * (newZoom / this.zoom);
     this.zoom = newZoom;
@@ -159,7 +198,7 @@ export class OfficeEngine {
   private findAgentAt(x: number, y: number): Agent | null {
     if (!this.state) return null;
     const radius = 24;
-    for (const agent of Object.values(this.state.agents)) {
+    for (const agent of Object.values(this.state.agents || {})) {
       const dx = agent.coordinates.x - x;
       const dy = agent.coordinates.y - y;
       if (Math.hypot(dx, dy) < radius) {
@@ -169,41 +208,50 @@ export class OfficeEngine {
     return null;
   }
 
+  // Safe accessor guards to prevent 'Cannot read properties of undefined (reading dimensions)'
+  public getRoomDimensions(roomId: string): Dimensions {
+    const room = this.state?.rooms?.[roomId];
+    return room?.dimensions || DEFAULT_DIMENSIONS;
+  }
+
+  public getAgentDimensions(agent?: Agent): Dimensions {
+    return agent?.dimensions || DEFAULT_DIMENSIONS;
+  }
+
   private updateParticles(): void {
-    // 1. Spawn coffee steam particle from espresso machine { x: 140, y: 340 - 25 }
+    // 1. Steam particles from espresso machine
     if (this.tick % 8 === 0 && this.particles.length < 50) {
       this.particles.push({
         x: 140 - 45 + (Math.random() * 6 - 3),
         y: 340 - 25,
         vx: (Math.random() - 0.5) * 0.4,
         vy: -0.6 - Math.random() * 0.5,
-        alpha: 0.6,
+        alpha: 0.55,
         size: 2.5 + Math.random() * 2,
-        color: 'rgba(255, 255, 255,',
-        maxLife: 60,
+        color: 'rgba(245, 240, 230,',
+        maxLife: 55,
         life: 0,
       });
     }
 
-    // 2. Spawn code keystroke spark when coder is active
+    // 2. Typing keystroke click-clack particles when coding
     if (this.state) {
-      const coder = this.state.agents.coder;
+      const coder = this.state.agents?.coder;
       if (coder && coder.status === 'CODING' && this.tick % 6 === 0) {
         this.particles.push({
           x: coder.coordinates.x + (Math.random() * 20 - 10),
           y: coder.coordinates.y - 12,
           vx: (Math.random() - 0.5) * 1.2,
-          vy: -1.2 - Math.random() * 1.0,
-          alpha: 0.9,
+          vy: -1.0 - Math.random() * 0.8,
+          alpha: 0.85,
           size: 2,
-          color: Math.random() > 0.5 ? 'rgba(56, 189, 248,' : 'rgba(52, 211, 153,',
-          maxLife: 35,
+          color: Math.random() > 0.5 ? 'rgba(82, 183, 136,' : 'rgba(233, 196, 106,',
+          maxLife: 30,
           life: 0,
         });
       }
     }
 
-    // Update & remove expired particles
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.x += p.vx;
@@ -231,11 +279,10 @@ export class OfficeEngine {
     if (!this.enableLighting) return;
 
     ctx.save();
-    // Warm incandescent desk lamps & overhead tungsten glow
     const desks = [
-      { x: 260, y: 190, color: 'rgba(233, 196, 106, 0.09)' }, // PM desk (warm amber)
-      { x: 420, y: 190, color: 'rgba(132, 169, 140, 0.09)' }, // Coder desk (muted sage)
-      { x: 580, y: 190, color: 'rgba(212, 163, 115, 0.09)' }, // Reviewer desk (warm beige)
+      { x: 260, y: 190, color: 'rgba(233, 196, 106, 0.08)' },
+      { x: 420, y: 190, color: 'rgba(132, 169, 140, 0.08)' },
+      { x: 580, y: 190, color: 'rgba(212, 163, 115, 0.08)' },
     ];
 
     for (const desk of desks) {
@@ -246,9 +293,8 @@ export class OfficeEngine {
       ctx.fillRect(desk.x - 85, desk.y - 85, 170, 170);
     }
 
-    // Server room soft sage-green indicator glow
     const sGrad = ctx.createRadialGradient(740, 280, 15, 740, 280, 110);
-    sGrad.addColorStop(0, 'rgba(82, 183, 136, 0.12)');
+    sGrad.addColorStop(0, 'rgba(82, 183, 136, 0.1)');
     sGrad.addColorStop(1, 'transparent');
     ctx.fillStyle = sGrad;
     ctx.fillRect(630, 170, 220, 220);
@@ -261,35 +307,34 @@ export class OfficeEngine {
     this.updateParticles();
 
     const rect = this.canvas.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
+    const width = rect.width || 1200;
+    const height = rect.height || 750;
 
-    // Clear canvas with deep olive-slate perimeter
+    // Clear canvas with tactile slate-olive perimeter
     this.ctx.save();
-    this.ctx.fillStyle = '#111813';
+    this.ctx.fillStyle = '#161A16';
     this.ctx.fillRect(0, 0, width, height);
 
-    // Apply Camera Transform
     this.ctx.translate(this.cameraX, this.cameraY);
     this.ctx.scale(this.zoom, this.zoom);
 
-    // 1. Draw Office Floor & Room Zones
+    // 1. Draw Warm Neutral Beige Office Canvas Floor (#E7E3D8)
     drawOfficeFloor(this.ctx, 880, 480);
 
-    // 2. Draw Rooms & Structures
-    // Conference room (top left)
-    drawConferenceRoom(this.ctx, 180, 140, this.tick);
+    // 2. Draw Rooms with safe dimensions
+    const confDims = this.getRoomDimensions('conference');
+    drawConferenceRoom(this.ctx, 180, 140, this.tick, confDims);
 
-    // Coffee Lounge (bottom left)
-    drawCoffeeLounge(this.ctx, 140, 340, this.tick, this.particles);
+    const cafeDims = this.getRoomDimensions('cafe');
+    drawCoffeeLounge(this.ctx, 140, 340, this.tick, this.particles, cafeDims);
 
-    // Server Room (top right)
     const isServerActive =
-      this.state?.agents.devops?.status === 'DEPLOYING' ||
-      this.state?.agents.devops?.status === 'TESTING';
-    drawServerRoom(this.ctx, 740, 280, this.tick, isServerActive || false);
+      this.state?.agents?.devops?.status === 'DEPLOYING' ||
+      this.state?.agents?.devops?.status === 'TESTING';
+    const serverDims = this.getRoomDimensions('server');
+    drawServerRoom(this.ctx, 740, 280, this.tick, isServerActive || false, serverDims);
 
-    // 3. Draw Work Desks (4 Desks)
+    // 3. Draw Desks
     const deskConfigs = [
       { x: 260, y: 190, name: 'Michael (PM)', id: 'pm' },
       { x: 420, y: 190, name: 'Jim (Coder)', id: 'coder' },
@@ -297,24 +342,25 @@ export class OfficeEngine {
     ];
 
     for (const d of deskConfigs) {
-      const agent = this.state?.agents[d.id];
+      const agent = this.state?.agents?.[d.id];
       const isActive = agent ? agent.status !== 'IDLE' : false;
       drawDesk(this.ctx, d.x, d.y, d.name, isActive, this.tick);
     }
 
-    // 4. Draw Particles (steam, sparks)
+    // 4. Draw Particles
     this.drawParticles(this.ctx);
 
     // 5. Draw Dynamic Lighting
     this.drawDynamicLighting(this.ctx);
 
-    // 6. Draw Agents with status bubbles
+    // 6. Draw Agents
     if (this.state?.agents) {
       const sortedAgents = Object.values(this.state.agents).sort(
         (a, b) => a.coordinates.y - b.coordinates.y
       );
 
       for (const agent of sortedAgents) {
+        if (!agent) continue;
         const isSelected = this.selectedAgentId === agent.id;
         const isHovered = this.hoveredAgentId === agent.id;
         drawCharacter(this.ctx, agent, this.tick, isSelected, isHovered);

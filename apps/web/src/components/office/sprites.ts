@@ -1,4 +1,4 @@
-import { Agent } from '../../lib/types';
+import { Agent, Dimensions } from '../../lib/types';
 
 export interface Particle {
   x: number;
@@ -11,6 +11,8 @@ export interface Particle {
   maxLife: number;
   life: number;
 }
+
+export const DEFAULT_DIMENSIONS: Dimensions = { width: 32, height: 32 };
 
 /**
  * Draw a pixelated character sprite directly to Canvas 2D
@@ -27,45 +29,46 @@ export function drawCharacter(
   const isWalking = agent.status === 'WALKING';
   const isCoding = agent.status === 'CODING';
 
-  // Walk cycle bobbing
-  const walkBob = isWalking ? Math.sin(tick * 0.25) * 3 : 0;
-  const legOffset = isWalking ? Math.sin(tick * 0.25) * 4 : 0;
-  const typeBob = isCoding ? Math.sin(tick * 0.4) * 1.5 : 0;
+  // Subtle natural idle breathing animation
+  const breatheBob = !isWalking ? Math.sin(tick * 0.08) * 0.8 : 0;
+  const walkBob = isWalking ? Math.sin(tick * 0.25) * 2.8 : 0;
+  const legOffset = isWalking ? Math.sin(tick * 0.25) * 3.5 : 0;
+  const typeBob = isCoding ? Math.sin(tick * 0.4) * 1.2 : 0;
 
   ctx.save();
-  ctx.translate(x, y + walkBob + typeBob);
+  ctx.translate(x, y + walkBob + typeBob + breatheBob);
 
   // 1. Selection / Hover Halo (Warm Amber / Muted Sage Glow)
   if (isSelected || isHovered) {
     ctx.save();
     ctx.beginPath();
     ctx.ellipse(0, 14, 18, 7, 0, 0, Math.PI * 2);
-    ctx.fillStyle = isSelected ? 'rgba(233, 196, 106, 0.45)' : 'rgba(132, 169, 140, 0.4)';
+    ctx.fillStyle = isSelected ? 'rgba(233, 196, 106, 0.45)' : 'rgba(132, 169, 140, 0.35)';
     ctx.shadowColor = isSelected ? '#e9c46a' : '#84a98c';
-    ctx.shadowBlur = isSelected ? 12 : 7;
+    ctx.shadowBlur = isSelected ? 12 : 6;
     ctx.fill();
-    ctx.strokeStyle = isSelected ? '#f4a261' : '#52796f';
+    ctx.strokeStyle = isSelected ? '#d4a373' : '#52796f';
     ctx.lineWidth = 1.6;
     ctx.stroke();
     ctx.restore();
   } else {
-    // Subtle shadow under feet
+    // Subtle tactile floor shadow under character feet
     ctx.save();
     ctx.beginPath();
     ctx.ellipse(0, 14, 14, 5, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(40, 35, 30, 0.35)';
+    ctx.fillStyle = 'rgba(30, 25, 20, 0.25)';
     ctx.fill();
     ctx.restore();
   }
 
-  // Direction facing: if target is to the left of current, flip
+  // Direction facing
   const dx = agent.targetCoordinates.x - agent.coordinates.x;
   if (dx < -1) {
     ctx.scale(-1, 1);
   }
 
   // 2. Legs / Shoes
-  ctx.fillStyle = '#2c221e'; // Leather brown shoes
+  ctx.fillStyle = '#261c16'; // Classic leather brown shoes
   if (isWalking) {
     ctx.fillRect(-6, 8 + legOffset, 5, 6);
     ctx.fillRect(1, 8 - legOffset, 5, 6);
@@ -84,7 +87,7 @@ export function drawCharacter(
 
   // Tie / Collar / Details
   if (config.accessory === 'tie') {
-    ctx.fillStyle = '#bc4749'; // Classic burgundy tie
+    ctx.fillStyle = '#9e2a2b'; // Classic burgundy tie
     ctx.fillRect(-1.5, -9, 3, 8);
   } else if (config.accessory === 'badge') {
     ctx.fillStyle = '#e9c46a'; // Brass badge
@@ -172,12 +175,12 @@ export function drawCharacter(
 
   ctx.restore();
 
-  // 7. Status Speech Bubble overhead
+  // 7. Clean, Crisp Status Speech Tag overhead
   drawSpeechBubble(ctx, agent, x, y - 28 + walkBob, tick, isSelected);
 }
 
 /**
- * Draw animated overhead speech bubble in deep olive-slate and sage theme
+ * Draw animated overhead speech tag with smooth pill styling
  */
 function drawSpeechBubble(
   ctx: CanvasRenderingContext2D,
@@ -187,59 +190,55 @@ function drawSpeechBubble(
   tick: number,
   isSelected: boolean
 ): void {
-  const text = agent.currentAction || agent.name;
+  const actionText = agent.currentAction || agent.name;
   ctx.save();
 
-  ctx.font = 'bold 9px "JetBrains Mono", Menlo, Consolas, monospace';
-  const textWidth = ctx.measureText(text).width;
-  const bubbleWidth = Math.max(textWidth + 24, 75);
-  const bubbleHeight = 23;
+  ctx.font = '600 9px "JetBrains Mono", Menlo, Consolas, monospace';
+  const textWidth = ctx.measureText(actionText).width;
+  const bubbleWidth = Math.max(textWidth + 24, 76);
+  const bubbleHeight = 22;
   const bubbleX = x - bubbleWidth / 2;
-  const bubbleY = y - bubbleHeight - 8;
+  const bubbleY = y - bubbleHeight - 6;
 
-  // Warm retro status colors
-  let statusDotColor = '#84a98c'; // sage
-  let badgeBorder = '#52796f';
-  let badgeBg = '#1c261e';
-
+  // Soft indicator color
+  let dotColor = '#84a98c';
+  let badgeBorder = '#2d382e';
   if (agent.status === 'CODING') {
-    statusDotColor = '#52b788'; // vibrant sage green
-    badgeBorder = '#2d6a4f';
-    badgeBg = '#14281d';
+    dotColor = '#52b788';
+    badgeBorder = '#3e6047';
   } else if (agent.status === 'TESTING') {
-    statusDotColor = '#e9c46a'; // warm amber
-    badgeBorder = '#d4a373';
-    badgeBg = '#282114';
+    dotColor = '#e9c46a';
+    badgeBorder = '#7c6332';
   } else if (agent.status === 'DEPLOYING') {
-    statusDotColor = '#f4a261'; // warm terracotta
-    badgeBorder = '#e76f51';
-    badgeBg = '#2d1b15';
+    dotColor = '#f4a261';
+    badgeBorder = '#8a5340';
   } else if (agent.status === 'PLANNING') {
-    statusDotColor = '#a8dadc'; // soft muted teal
-    badgeBorder = '#457b9d';
-    badgeBg = '#162226';
+    dotColor = '#a8dadc';
+    badgeBorder = '#3d6174';
   }
 
-  const floatY = Math.sin(tick * 0.08 + x * 0.01) * 2;
+  // Subtle gentle float
+  const floatY = Math.sin(tick * 0.05 + x * 0.01) * 1.2;
 
   ctx.save();
   ctx.translate(0, floatY);
 
-  // Deep olive-slate bubble background with warm sage border
-  ctx.fillStyle = 'rgba(21, 29, 23, 0.95)';
+  // Deep tactile slate-olive bubble background
+  ctx.fillStyle = 'rgba(22, 26, 22, 0.94)';
   ctx.strokeStyle = isSelected ? '#e9c46a' : badgeBorder;
-  ctx.lineWidth = isSelected ? 2 : 1.3;
+  ctx.lineWidth = isSelected ? 1.6 : 1.2;
 
+  // Rounded pill
   ctx.beginPath();
-  const radius = 6;
+  const radius = 5;
   ctx.moveTo(bubbleX + radius, bubbleY);
   ctx.lineTo(bubbleX + bubbleWidth - radius, bubbleY);
   ctx.quadraticCurveTo(bubbleX + bubbleWidth, bubbleY, bubbleX + bubbleWidth, bubbleY + radius);
   ctx.lineTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight - radius);
   ctx.quadraticCurveTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight, bubbleX + bubbleWidth - radius, bubbleY + bubbleHeight);
-  // Tail
+  // Pointer tail
   ctx.lineTo(x + 4, bubbleY + bubbleHeight);
-  ctx.lineTo(x, bubbleY + bubbleHeight + 5);
+  ctx.lineTo(x, bubbleY + bubbleHeight + 4);
   ctx.lineTo(x - 4, bubbleY + bubbleHeight);
   ctx.lineTo(bubbleX + radius, bubbleY + bubbleHeight);
   ctx.quadraticCurveTo(bubbleX, bubbleY + bubbleHeight, bubbleX, bubbleY + bubbleHeight - radius);
@@ -251,25 +250,25 @@ function drawSpeechBubble(
 
   // Status indicator dot
   ctx.beginPath();
-  ctx.arc(bubbleX + 11, bubbleY + bubbleHeight / 2, 3.5, 0, Math.PI * 2);
-  ctx.fillStyle = statusDotColor;
+  ctx.arc(bubbleX + 10, bubbleY + bubbleHeight / 2, 3, 0, Math.PI * 2);
+  ctx.fillStyle = dotColor;
   ctx.fill();
 
   // Agent text in warm ivory
-  ctx.fillStyle = '#f8f5ee';
-  ctx.fillText(text, bubbleX + 19, bubbleY + 14.5);
+  ctx.fillStyle = '#faf7ee';
+  ctx.fillText(actionText, bubbleX + 17, bubbleY + 14);
 
   // Role tag pill if selected
   if (isSelected) {
     const rolePill = `[${agent.role}] ${agent.name}`;
     ctx.font = '8px monospace';
-    const pillWidth = ctx.measureText(rolePill).width + 12;
-    ctx.fillStyle = badgeBg;
+    const pillWidth = ctx.measureText(rolePill).width + 10;
+    ctx.fillStyle = '#1c221d';
     ctx.fillRect(x - pillWidth / 2, bubbleY - 14, pillWidth, 12);
-    ctx.strokeStyle = isSelected ? '#e9c46a' : '#84a98c';
+    ctx.strokeStyle = '#e9c46a';
     ctx.strokeRect(x - pillWidth / 2, bubbleY - 14, pillWidth, 12);
-    ctx.fillStyle = '#f4f1ea';
-    ctx.fillText(rolePill, x - pillWidth / 2 + 6, bubbleY - 5);
+    ctx.fillStyle = '#faf7ee';
+    ctx.fillText(rolePill, x - pillWidth / 2 + 5, bubbleY - 5);
   }
 
   ctx.restore();
@@ -290,45 +289,42 @@ export function drawDesk(
   ctx.save();
   ctx.translate(x, y);
 
-  // 1. Office Chair behind desk (dark executive leather)
+  // 1. Office Chair behind desk
   ctx.fillStyle = '#261c16';
-  ctx.fillRect(-12, -26, 24, 20); // Backrest
+  ctx.fillRect(-12, -26, 24, 20);
   ctx.fillStyle = '#1c1410';
-  ctx.fillRect(-14, -28, 28, 4); // Headrest
+  ctx.fillRect(-14, -28, 28, 4);
   ctx.fillStyle = '#3a2b22';
-  ctx.fillRect(-10, -6, 20, 6); // Seat cushion
+  ctx.fillRect(-10, -6, 20, 6);
 
   // 2. Desk Table Surface (Warm Walnut / Oak Wood)
-  ctx.fillStyle = '#6b4423'; // Base rich wood
+  ctx.fillStyle = '#6b4423';
   ctx.fillRect(-45, -2, 90, 36);
-  ctx.fillStyle = '#87562f'; // Warm beveled top edge
+  ctx.fillStyle = '#87562f';
   ctx.fillRect(-45, -2, 90, 4);
-  ctx.fillStyle = '#4a2e16'; // Wood legs
+  ctx.fillStyle = '#4a2e16';
   ctx.fillRect(-43, 34, 6, 20);
   ctx.fillRect(37, 34, 6, 20);
 
-  // 3. Desk Blotter (Classic dark hunter green / sage leather pad)
+  // 3. Desk Blotter (Dark hunter green / sage leather pad)
   ctx.fillStyle = '#1e3327';
   ctx.fillRect(-35, 4, 70, 24);
   ctx.strokeStyle = '#324f3e';
   ctx.lineWidth = 1;
   ctx.strokeRect(-35, 4, 70, 24);
 
-  // 4. Dual Monitors (Modern retro slate-beige & dark bezel)
-  // Monitor 1 (Main)
+  // 4. Dual Monitors
   ctx.fillStyle = '#222823';
   ctx.fillRect(-32, -24, 30, 20);
-  ctx.fillStyle = isActive ? '#0e1d13' : '#141815'; // Green phosphor screen
+  ctx.fillStyle = isActive ? '#0e1d13' : '#141815';
   ctx.fillRect(-30, -22, 26, 16);
-  // Monitor stand
   ctx.fillStyle = '#4a534c';
   ctx.fillRect(-19, -4, 4, 7);
   ctx.fillRect(-22, 2, 10, 3);
 
-  // Monitor 2 (Secondary)
   ctx.fillStyle = '#222823';
   ctx.fillRect(2, -24, 28, 20);
-  ctx.fillStyle = isActive ? '#1e1c12' : '#141815'; // Amber phosphor screen
+  ctx.fillStyle = isActive ? '#1e1c12' : '#141815';
   ctx.fillRect(4, -22, 24, 16);
   ctx.fillStyle = '#4a534c';
   ctx.fillRect(14, -4, 4, 7);
@@ -337,7 +333,6 @@ export function drawDesk(
   // Screen code animation
   if (isActive) {
     const codeTick = (tick % 60) / 60;
-    // Monitor 1 green code lines
     ctx.fillStyle = '#52b788';
     ctx.fillRect(-28, -19, 14 + Math.sin(tick * 0.1) * 6, 1.5);
     ctx.fillStyle = '#74c69d';
@@ -347,15 +342,6 @@ export function drawDesk(
     ctx.fillStyle = '#e9c46a';
     ctx.fillRect(-28, -7, 16, 1.5);
 
-    // Warm glow
-    ctx.save();
-    ctx.fillStyle = 'rgba(82, 183, 136, 0.1)';
-    ctx.beginPath();
-    ctx.arc(-17, -14, 26, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Monitor 2 amber metrics
     ctx.fillStyle = '#e9c46a';
     ctx.fillRect(6, -18, 9, 2);
     ctx.fillRect(6, -14, 14, 2);
@@ -367,9 +353,8 @@ export function drawDesk(
   // 5. Mechanical Keyboard & Mouse
   ctx.fillStyle = '#3a443e';
   ctx.fillRect(-18, 12, 24, 8);
-  ctx.fillStyle = '#dcd7cd'; // Warm beige keycaps
+  ctx.fillStyle = '#dcd7cd';
   ctx.fillRect(-16, 13, 20, 6);
-  // Mouse
   ctx.fillStyle = '#b7b0a2';
   ctx.fillRect(10, 14, 6, 7);
 
@@ -378,13 +363,13 @@ export function drawDesk(
   ctx.fillRect(26, 8, 7, 9);
   ctx.fillStyle = '#beb6a6';
   ctx.fillRect(32, 10, 3, 5);
-  ctx.fillStyle = '#3f220d'; // Coffee
+  ctx.fillStyle = '#3f220d';
   ctx.fillRect(27, 8, 5, 2);
 
   // 7. Brass / Wood Engraved Nameplate
   ctx.fillStyle = '#261b12';
   ctx.fillRect(-28, 24, 56, 10);
-  ctx.strokeStyle = '#cda15a'; // Brass gold border
+  ctx.strokeStyle = '#cda15a';
   ctx.lineWidth = 1;
   ctx.strokeRect(-28, 24, 56, 10);
   ctx.fillStyle = '#e9c46a';
@@ -403,66 +388,63 @@ export function drawConferenceRoom(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  tick: number
+  tick: number,
+  dimensions?: Dimensions
 ): void {
+  const dims = dimensions || { width: 220, height: 170 };
+  const halfW = dims.width / 2;
+  const halfH = dims.height / 2;
+
   ctx.save();
   ctx.translate(x, y);
 
-  // Conference Room Flooring: Warm Hardwood Parquet
+  // Flooring: Hardwood Parquet
   ctx.fillStyle = '#a6825c';
-  ctx.fillRect(-110, -85, 220, 170);
+  ctx.fillRect(-halfW, -halfH, dims.width, dims.height);
 
-  // Parquet plank grid lines
   ctx.strokeStyle = 'rgba(110, 80, 50, 0.35)';
   ctx.lineWidth = 1;
-  for (let px = -110; px <= 110; px += 20) {
+  for (let px = -halfW; px <= halfW; px += 20) {
     ctx.beginPath();
-    ctx.moveTo(px, -85);
-    ctx.lineTo(px, 85);
+    ctx.moveTo(px, -halfH);
+    ctx.lineTo(px, halfH);
     ctx.stroke();
   }
-  for (let py = -85; py <= 85; py += 20) {
+  for (let py = -halfH; py <= halfH; py += 20) {
     ctx.beginPath();
-    ctx.moveTo(-110, py);
-    ctx.lineTo(110, py);
+    ctx.moveTo(-halfW, py);
+    ctx.lineTo(halfW, py);
     ctx.stroke();
   }
 
-  // Room Divider Walls (Warm Oak base + Frosted glass top)
+  // Room Divider Walls
   ctx.strokeStyle = '#5a3d24';
   ctx.lineWidth = 3;
-  ctx.strokeRect(-110, -85, 220, 170);
+  ctx.strokeRect(-halfW, -halfH, dims.width, dims.height);
 
-  // Room Header Banner
+  // Banner
   ctx.fillStyle = '#2d1e13';
-  ctx.fillRect(-105, -80, 150, 14);
+  ctx.fillRect(-halfW + 5, -halfH + 5, 145, 14);
   ctx.fillStyle = '#e9c46a';
   ctx.font = 'bold 8.5px monospace';
-  ctx.fillText('CONFERENCE // SPRINT ARCHITECTURE', -100, -70);
+  ctx.fillText('CONFERENCE // PLANNING', -halfW + 10, -halfH + 15);
 
-  // Whiteboard on top wall
+  // Whiteboard
   ctx.fillStyle = '#fbf9f4';
-  ctx.fillRect(-70, -82, 140, 24);
+  ctx.fillRect(-70, -halfH + 3, 140, 24);
   ctx.strokeStyle = '#8c7d6b';
   ctx.lineWidth = 1.2;
-  ctx.strokeRect(-70, -82, 140, 24);
+  ctx.strokeRect(-70, -halfH + 3, 140, 24);
 
-  // Whiteboard flowchart
+  // Diagram on board
   ctx.fillStyle = '#2a6f97';
-  ctx.fillRect(-55, -78, 16, 14);
+  ctx.fillRect(-55, -halfH + 7, 16, 14);
   ctx.fillStyle = '#386641';
-  ctx.fillRect(-15, -78, 16, 14);
+  ctx.fillRect(-15, -halfH + 7, 16, 14);
   ctx.fillStyle = '#bc4749';
-  ctx.fillRect(25, -78, 16, 14);
-  ctx.strokeStyle = '#8c7d6b';
-  ctx.beginPath();
-  ctx.moveTo(-39, -71);
-  ctx.lineTo(-15, -71);
-  ctx.moveTo(1, -71);
-  ctx.lineTo(25, -71);
-  ctx.stroke();
+  ctx.fillRect(25, -halfH + 7, 16, 14);
 
-  // Solid Walnut Oval Conference Table
+  // Table
   ctx.save();
   ctx.fillStyle = '#5c381e';
   ctx.beginPath();
@@ -472,7 +454,7 @@ export function drawConferenceRoom(
   ctx.lineWidth = 3;
   ctx.stroke();
 
-  // Table center brass speakerphone unit
+  // Brass speakerphone
   ctx.beginPath();
   ctx.arc(0, 5, 12, 0, Math.PI * 2);
   ctx.fillStyle = '#261c14';
@@ -481,7 +463,6 @@ export function drawConferenceRoom(
   ctx.lineWidth = 1.2;
   ctx.stroke();
 
-  // Warm amber status beacon
   const amberAlpha = 0.25 + Math.sin(tick * 0.1) * 0.1;
   ctx.fillStyle = `rgba(233, 196, 106, ${amberAlpha})`;
   ctx.beginPath();
@@ -489,7 +470,7 @@ export function drawConferenceRoom(
   ctx.fill();
   ctx.restore();
 
-  // Executive Conference Chairs
+  // Chairs
   const chairAngles = [0, Math.PI / 3, (2 * Math.PI) / 3, Math.PI, (4 * Math.PI) / 3, (5 * Math.PI) / 3];
   for (const angle of chairAngles) {
     const cx = Math.cos(angle) * 84;
@@ -508,31 +489,33 @@ export function drawConferenceRoom(
 }
 
 /**
- * Draw Server Room with dark industrial casing and status blinkers
+ * Draw Server Room with status blinkers
  */
 export function drawServerRoom(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   tick: number,
-  isActive: boolean
+  isActive: boolean,
+  dimensions?: Dimensions
 ): void {
+  const dims = dimensions || { width: 140, height: 180 };
+  const halfW = dims.width / 2;
+  const halfH = dims.height / 2;
+
   ctx.save();
   ctx.translate(x, y);
 
-  // Room perimeter wall dividers (Dark slate with glass panel)
   ctx.fillStyle = 'rgba(28, 36, 30, 0.85)';
-  ctx.fillRect(-70, -90, 140, 180);
+  ctx.fillRect(-halfW, -halfH, dims.width, dims.height);
   ctx.strokeStyle = '#425446';
   ctx.lineWidth = 2;
-  ctx.strokeRect(-70, -90, 140, 180);
+  ctx.strokeRect(-halfW, -halfH, dims.width, dims.height);
 
-  // Room label
   ctx.fillStyle = '#84a98c';
   ctx.font = 'bold 8.5px monospace';
-  ctx.fillText('SERVER RACK CLUSTER', -60, -75);
+  ctx.fillText('SERVER RACK CLUSTER', -halfW + 10, -halfH + 15);
 
-  // 3 Server Cabinets
   const rackX = [-45, -5, 35];
   for (let r = 0; r < rackX.length; r++) {
     const rx = rackX[r];
@@ -549,7 +532,6 @@ export function drawServerRoom(
       ctx.fillStyle = '#111713';
       ctx.fillRect(rx - 11, uy + 2, 22, 7);
 
-      // Blinking LEDs
       const ledTick = (tick + r * 15 + u * 7) % 40;
       const isGreen = ledTick < 22;
       const isAmber = ledTick >= 22 && ledTick < 32;
@@ -565,17 +547,15 @@ export function drawServerRoom(
     }
   }
 
-  // Ceiling Cable Tray
   ctx.fillStyle = '#3a493e';
   ctx.fillRect(-65, -88, 130, 4);
   ctx.fillStyle = '#e9c46a';
   ctx.fillRect(-60, -87, 120, 2);
 
-  // Warm green room wash if active
   if (isActive) {
     const glow = Math.sin(tick * 0.15) * 0.08 + 0.12;
     ctx.fillStyle = `rgba(82, 183, 136, ${glow})`;
-    ctx.fillRect(-68, -88, 136, 176);
+    ctx.fillRect(-halfW + 2, -halfH + 2, dims.width - 4, dims.height - 4);
   }
 
   ctx.restore();
@@ -589,62 +569,62 @@ export function drawCoffeeLounge(
   x: number,
   y: number,
   tick: number,
-  particles: Particle[]
+  particles: Particle[],
+  dimensions?: Dimensions
 ): void {
+  const dims = dimensions || { width: 170, height: 120 };
+  const halfW = dims.width / 2;
+  const halfH = dims.height / 2;
+
   ctx.save();
   ctx.translate(x, y);
 
-  // Floor Linoleum Tiles (retro cream & warm tan checkerboard)
   ctx.fillStyle = '#e8e4db';
-  ctx.fillRect(-85, -60, 170, 120);
+  ctx.fillRect(-halfW, -halfH, dims.width, dims.height);
 
   const tileSize = 20;
   ctx.fillStyle = '#ded8cc';
-  for (let ty = -60; ty < 60; ty += tileSize) {
-    for (let tx = -85; tx < 85; tx += tileSize) {
-      if ((Math.floor((tx + 85) / tileSize) + Math.floor((ty + 60) / tileSize)) % 2 === 0) {
+  for (let ty = -halfH; ty < halfH; ty += tileSize) {
+    for (let tx = -halfW; tx < halfW; tx += tileSize) {
+      if ((Math.floor((tx + halfW) / tileSize) + Math.floor((ty + halfH) / tileSize)) % 2 === 0) {
         ctx.fillRect(tx, ty, tileSize, tileSize);
       }
     }
   }
 
-  // Partition border
   ctx.strokeStyle = '#7c5a3d';
   ctx.lineWidth = 1.5;
-  ctx.strokeRect(-85, -60, 170, 120);
+  ctx.strokeRect(-halfW, -halfH, dims.width, dims.height);
 
   ctx.fillStyle = '#5c3a1d';
   ctx.font = 'bold 8.5px monospace';
-  ctx.fillText('BREAK ROOM // CAFE', -75, -45);
+  ctx.fillText('BREAK ROOM // CAFE', -halfW + 10, -halfH + 15);
 
-  // Wooden Coffee Bar Counter
+  // Counter
   ctx.fillStyle = '#6b4524';
   ctx.fillRect(-70, -25, 80, 50);
   ctx.fillStyle = '#8a5930';
   ctx.fillRect(-70, -25, 80, 5);
 
-  // Chrome Espresso Machine
+  // Espresso Machine
   ctx.fillStyle = '#9e978e';
   ctx.fillRect(-60, -42, 32, 20);
   ctx.fillStyle = '#26221d';
   ctx.fillRect(-55, -38, 22, 10);
   ctx.fillStyle = '#e9c46a';
   ctx.fillRect(-52, -35, 4, 4);
-  // Portafilter
   ctx.fillStyle = '#cfc9be';
   ctx.fillRect(-50, -22, 12, 3);
-  // Mug
   ctx.fillStyle = '#faf8f4';
   ctx.fillRect(-48, -19, 8, 8);
 
-  // Water Cooler (retro off-white unit)
+  // Water Cooler
   ctx.fillStyle = '#ebe6dc';
   ctx.fillRect(20, -10, 22, 40);
   ctx.fillStyle = '#457b9d';
   ctx.fillRect(24, 5, 4, 6);
   ctx.fillStyle = '#e76f51';
   ctx.fillRect(32, 5, 4, 6);
-  // Bottle
   ctx.save();
   ctx.fillStyle = 'rgba(69, 123, 157, 0.55)';
   ctx.beginPath();
@@ -664,12 +644,11 @@ export function drawCoffeeLounge(
   }
   ctx.restore();
 
-  // Potted Office Plant (Terracotta pot & lush monstera/ficus leaves)
-  ctx.fillStyle = '#c86d51'; // Terracotta
+  // Potted Office Plant
+  ctx.fillStyle = '#c86d51';
   ctx.fillRect(52, 10, 18, 22);
   ctx.fillStyle = '#a6543b';
   ctx.fillRect(50, 8, 22, 4);
-  // Lush Green Leaves
   ctx.fillStyle = '#2d6a4f';
   ctx.beginPath();
   ctx.arc(61, 2, 14, 0, Math.PI * 2);
@@ -683,19 +662,19 @@ export function drawCoffeeLounge(
 }
 
 /**
- * Render Warm Neutral Beige Office Carpet Floor with subtle room divider partitions
+ * Render Warm Neutral Beige Office Canvas Floor (#E7E3D8)
  */
 export function drawOfficeFloor(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number
 ): void {
-  // 1. Warm Neutral Beige Plush Carpet
-  ctx.fillStyle = '#d6d0c2';
+  // Warm neutral office canvas floor (#E7E3D8)
+  ctx.fillStyle = '#e7e3d8';
   ctx.fillRect(0, 0, width, height);
 
   // Subtle woven carpet texture / grid
-  ctx.strokeStyle = 'rgba(180, 172, 156, 0.4)';
+  ctx.strokeStyle = 'rgba(195, 188, 172, 0.4)';
   ctx.lineWidth = 1;
   const tileSize = 32;
   for (let x = 0; x < width; x += tileSize) {
@@ -711,28 +690,19 @@ export function drawOfficeFloor(
     ctx.stroke();
   }
 
-  // 2. Zone Floor Base Overlays
   // Engineering area subtle warm felt rug overlay
-  ctx.fillStyle = 'rgba(110, 125, 114, 0.09)'; // muted sage tint
+  ctx.fillStyle = 'rgba(110, 125, 114, 0.08)';
   ctx.fillRect(200, 110, 460, 180);
 
-  // 3. Subtle Room Dividers / Cubicle Partition Half-Walls
-  // Divider between Conference Room and Dev Desks
-  drawWallDivider(ctx, 65, 50, 230, 50); // top wall
-  drawWallDivider(ctx, 295, 50, 295, 230); // right divider
-
-  // Divider between Break Room and Main Hall
+  // Subtle Room Dividers / Cubicle Partition Half-Walls
+  drawWallDivider(ctx, 65, 50, 230, 50);
+  drawWallDivider(ctx, 295, 50, 295, 230);
   drawWallDivider(ctx, 50, 275, 230, 275);
   drawWallDivider(ctx, 230, 275, 230, 405);
-
-  // Divider wall enclosing Server Cluster
   drawWallDivider(ctx, 665, 185, 815, 185);
   drawWallDivider(ctx, 665, 185, 665, 375);
 }
 
-/**
- * Helper to render an architectural office room divider with wood base and trim
- */
 function drawWallDivider(
   ctx: CanvasRenderingContext2D,
   x1: number,
@@ -741,15 +711,14 @@ function drawWallDivider(
   y2: number
 ): void {
   ctx.save();
-  ctx.strokeStyle = '#5a3d24'; // Wood base/trim
+  ctx.strokeStyle = '#5a3d24';
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);
   ctx.stroke();
 
-  // Subtle interior fabric runner
-  ctx.strokeStyle = '#789582'; // Muted sage fabric
+  ctx.strokeStyle = '#789582';
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(x1, y1);

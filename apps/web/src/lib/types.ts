@@ -22,6 +22,11 @@ export interface Coordinates {
   y: number;
 }
 
+export interface Dimensions {
+  width: number;
+  height: number;
+}
+
 export interface Agent {
   id: string;
   name: string;
@@ -33,11 +38,28 @@ export interface Agent {
   coordinates: Coordinates;
   targetCoordinates: Coordinates;
   homeCoordinates: Coordinates;
+  dimensions?: Dimensions;
   currentAction: string;
+  actionProgress?: number; // 0 - 100 for tags like "Jim: writing route.ts [74%]"
   currentTaskId: string | null;
   tokensUsed: number;
   costUsd: number;
   logs: string[];
+}
+
+export interface RoomZone {
+  id: string;
+  name: string;
+  coordinates: Coordinates;
+  dimensions: Dimensions;
+  color: string;
+}
+
+export interface Furniture {
+  id: string;
+  name: string;
+  coordinates: Coordinates;
+  dimensions: Dimensions;
 }
 
 export type TaskStatus = 'BACKLOG' | 'IN_PROGRESS' | 'REVIEW' | 'DONE';
@@ -84,6 +106,8 @@ export interface OfficeState {
   tasks: Task[];
   metrics: GlobalMetrics;
   recentLogs: LogItem[];
+  rooms?: Record<string, RoomZone>;
+  furniture?: Record<string, Furniture>;
 }
 
 export type MessageType =
@@ -114,4 +138,7 @@ export interface FileTreeNode {
   size?: number;
   extension?: string;
   children?: FileTreeNode[];
+  content?: string;
 }
+
+export type CameraPreset = 'all' | 'jim' | 'server' | 'pm' | 'lounge';
